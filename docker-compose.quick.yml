@@ -1,0 +1,12 @@
+# Вариант БЕЗ домена и аккаунта Cloudflare: Quick Tunnel (*.trycloudflare.com).
+# Адрес меняется при каждом рестарте туннеля — бот узнаёт его сам через metrics /quicktunnel,
+# PUBLIC_URL в .env можно оставить пустым.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.quick.yml up -d --build
+#   docker compose logs cloudflared | grep trycloudflare      # посмотреть текущий адрес
+
+services:
+  cloudflared:
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 --url http://bot:8765
+    environment:
+      TUNNEL_TOKEN: ""
