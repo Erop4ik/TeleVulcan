@@ -1,6 +1,7 @@
 """Запуск: python -m vulcanbot  (бот + сайт привязки + опросчик в одном процессе)."""
 import asyncio
 import logging
+import os
 
 import uvicorn
 from aiogram import Bot
@@ -22,7 +23,7 @@ async def main() -> None:
     await db.open()
     bot = Bot(config.bot_token)
     dp = make_dispatcher(db)
-    server = uvicorn.Server(uvicorn.Config(make_app(db, bot), host="0.0.0.0",
+    server = uvicorn.Server(uvicorn.Config(make_app(db, bot), host=os.environ.get("WEB_HOST", "0.0.0.0"),
                                            port=config.web_port, log_level="info"))
     try:
         await asyncio.gather(

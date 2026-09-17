@@ -112,6 +112,30 @@ view names). The probe logs in and dumps responses to `probe_out/` (git-ignored)
 python tools/probe.py
 ```
 
+## Deployment (Docker + Cloudflare Tunnel)
+
+`docker-compose.yml` runs two containers:
+
+- **bot** — non-root user, read-only filesystem, all capabilities dropped, `no-new-privileges`,
+  memory/CPU/pids limits, **no ports published** to the host; data lives in the `televulcan-data` volume.
+- **cloudflared** — a Cloudflare Tunnel that exposes the link page over HTTPS via outbound connection
+  only, so the server IP is never revealed and no inbound port is opened. Telegram itself is polled
+  outbound too.
+
+Outbound requests to VULCAN can be routed through an HTTP(S) proxy with `HTTPS_PROXY=` in `.env`
+if you also want to hide the server IP from VULCAN.
+
+```bash
+git clone https://github.com/Erop4ik/TeleVulcan.git && cd TeleVulcan
+cp .env.example .env            # BOT_TOKEN, SECRET_KEY, PUBLIC_URL, VULCAN_SYMBOL, TUNNEL_TOKEN
+docker compose up -d --build
+docker compose logs -f bot
+```
+
+Cloudflare side: Zero Trust → Networks → Tunnels → Create tunnel → Docker → copy the token into
+`TUNNEL_TOKEN`; add a *Public hostname* `link.your-domain` → `http://bot:8765` and put
+`https://link.your-domain` into `PUBLIC_URL`.
+
 ## Limitations and ethics
 
 - Unofficial client. VULCAN may change the login form or the API at any time.

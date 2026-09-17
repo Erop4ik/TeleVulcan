@@ -98,6 +98,28 @@ python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().de
 python tools/probe.py
 ```
 
+## Деплой (Docker + Cloudflare Tunnel)
+
+`docker-compose.yml` поднимает два контейнера:
+
+- **bot** — без root, файловая система только для чтения, все capabilities сброшены,
+  `no-new-privileges`, лимиты памяти/CPU/процессов, **порты наружу не публикуются**; данные в volume `televulcan-data`.
+- **cloudflared** — Cloudflare Tunnel, который выводит страницу привязки по HTTPS через исходящее
+  соединение: IP сервера не светится, входящие порты не открываются. Telegram тоже опрашивается исходящими запросами.
+
+Запросы к Vulcan можно завернуть в HTTP(S)-прокси через `HTTPS_PROXY=` в `.env`, если хочешь спрятать IP и от Vulcan.
+
+```bash
+git clone https://github.com/Erop4ik/TeleVulcan.git && cd TeleVulcan
+cp .env.example .env            # BOT_TOKEN, SECRET_KEY, PUBLIC_URL, VULCAN_SYMBOL, TUNNEL_TOKEN
+docker compose up -d --build
+docker compose logs -f bot
+```
+
+На стороне Cloudflare: Zero Trust → Networks → Tunnels → Create tunnel → Docker → токен в
+`TUNNEL_TOKEN`; добавь *Public hostname* `link.твой-домен` → `http://bot:8765` и пропиши
+`https://link.твой-домен` в `PUBLIC_URL`.
+
 ## Ограничения и этика
 
 - Неофициальный клиент. Vulcan может поменять форму логина или API в любой момент.

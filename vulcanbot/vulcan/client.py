@@ -168,6 +168,7 @@ class VulcanClient:
             headers={"User-Agent": UA, "Accept-Language": "pl,en;q=0.8"},
             cookie_jar=aiohttp.CookieJar(),
             timeout=aiohttp.ClientTimeout(total=40),
+            trust_env=True,  # HTTPS_PROXY/HTTP_PROXY из окружения — чтобы прятать IP сервера
         )
         return self
 
