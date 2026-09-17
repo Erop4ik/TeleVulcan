@@ -54,6 +54,10 @@ def make_dispatcher(db: Database) -> Dispatcher:
             await pool.drop(acc["tg_id"])
             await db.mark(acc["tg_id"], False, str(ex))
             await chat.answer(f"Дневник не ответил: {ex}")
+        except Exception as ex:  # сеть, Telegram и т.п. — не молчим
+            log.exception("handler failed for tg=%s", acc["tg_id"])
+            await pool.drop(acc["tg_id"])
+            await chat.answer(f"Ошибка: {type(ex).__name__}: {str(ex)[:200]}")
         return None
 
     # ---------- базовые команды ----------
@@ -92,6 +96,14 @@ def make_dispatcher(db: Database) -> Dispatcher:
 
     async def show(bot: Bot, m, html: str, kb):
         """Новое сообщение для команды, редактирование на месте для кнопки."""
+        try:
+            await _show(bot, m, html, kb)
+        except Exception as ex:
+            log.exception("show failed")
+            chat = m if isinstance(m, Message) else m.message
+            await chat.answer(f"Не смог отправить сообщение: {type(ex).__name__}: {str(ex)[:200]}")
+
+    async def _show(bot: Bot, m, html: str, kb):
         if isinstance(m, CallbackQuery) and m.message:
             if await ui.edit_rich(bot, m.message.chat.id, m.message.message_id, html, kb):
                 return

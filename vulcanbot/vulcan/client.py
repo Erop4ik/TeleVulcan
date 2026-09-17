@@ -156,6 +156,7 @@ class VulcanClient:
     password: str
     key: str | None = None
     id_dziennik: int | None = None
+    global_key_skrzynka: str | None = None
     _session: aiohttp.ClientSession | None = field(default=None, repr=False)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
@@ -421,21 +422,30 @@ class VulcanClient:
         return await self.api("Oceny", idDziennik=self.id_dziennik, idOkresKlasyfikacyjny=pid) or {}
 
     async def _load_context(self) -> None:
-        """api/Context: key + idDziennik ученика (без key)."""
-        if not self._has_sso():
-            await self.login_flow()
-        async with self.s.get(f"{self.base}/api/Context",
-                              headers={"Accept": "application/json, text/plain, */*",
-                                       "Referer": f"{self.base}/App"}) as r:
-            if r.status != 200:
-                raise VulcanError(f"Context: HTTP {r.status}")
-            ctx = await r.json(content_type=None)
+        """api/Context: key + idDziennik ученика (без key). При 401/409 — перелогин и повтор."""
+        ctx: dict = {}
+        for attempt in range(2):
+            if not self._has_sso():
+                await self.login_flow()
+            async with self.s.get(f"{self.base}/api/Context",
+                                  headers={"Accept": "application/json, text/plain, */*",
+                                           "Referer": f"{self.base}/App"},
+                                  allow_redirects=False) as r:
+                if r.status in (301, 302, 401, 403, 409) and attempt == 0:
+                    log.info("Context: session expired (%s) -> re-login", r.status)
+                    self.s.cookie_jar.clear()
+                    continue
+                if r.status != 200:
+                    raise VulcanError(f"Context: HTTP {r.status}")
+                ctx = await r.json(content_type=None)
+            break
         students = ctx.get("uczniowie") or []
         me = next((u for u in students if u.get("key") == self.key), students[0] if students else None)
         if not me:
             raise VulcanError("Context: нет учеников")
         self.key = self.key or me.get("key")
         self.id_dziennik = me.get("idDziennik")
+        self.global_key_skrzynka = me.get("globalKeySkrzynka")
 
 
 def pretty(obj: Any, limit: int = 3000) -> str:
