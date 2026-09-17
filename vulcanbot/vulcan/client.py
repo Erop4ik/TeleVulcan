@@ -166,7 +166,9 @@ class VulcanClient:
     async def __aenter__(self) -> "VulcanClient":
         self._session = aiohttp.ClientSession(
             headers={"User-Agent": UA, "Accept-Language": "pl,en;q=0.8"},
-            cookie_jar=aiohttp.CookieJar(),
+            # quote_cookie=False: aiohttp >= 3.10 оборачивает base64-значения кук в кавычки,
+            # и ASP.NET на dziennik-logowanie отвечает 404 на Fs/Ls (проверено на 3.14.3)
+            cookie_jar=aiohttp.CookieJar(quote_cookie=False),
             timeout=aiohttp.ClientTimeout(total=40),
             trust_env=True,  # HTTPS_PROXY/HTTP_PROXY из окружения — чтобы прятать IP сервера
         )
