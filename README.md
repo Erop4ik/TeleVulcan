@@ -1,37 +1,40 @@
-# VulcanBot
+# TeleVulcan
 
-Telegram-бот для нового дневника **VULCAN «Uczeń»** (`dziennik-uczen.vulcan.net.pl`).
-Следит за планом занятий (замены, отмены, изменения), новыми оценками и домашними заданиями
-и присылает только изменения.
+> 🇷🇺 Русская версия: [README.ru.md](README.ru.md)
 
-## Как устроена привязка и почему нужен пароль
+Telegram bot for the new **VULCAN "Uczeń"** e-diary (`dziennik-uczen.vulcan.net.pl`) used by Polish schools.
+It watches the timetable (substitutions, cancellations, room/teacher changes), new homework and tests,
+grades and attendance, and sends only what changed.
 
-Vulcan для обычных аккаунтов (логин вида `ABCDEFG-123456`) **не выдаёт токенов** и не имеет OAuth
-для сторонних приложений. Все куки сессионные и умирают примерно через 20 минут простоя, продлить
-их без повторного ввода логина и пароля невозможно. Поэтому:
+## Why the bot needs your password
 
-- пользователь вводит логин и пароль **не в Telegram**, а на странице `/link/<token>` сайта бота;
-- бот проверяет данные реальным входом в дневник, шифрует их (Fernet, ключ `SECRET_KEY`) и хранит в SQLite;
-- при каждом опросе бот заходит в дневник заново; `/unlink` удаляет всё.
+Regular VULCAN accounts (login like `ABCDEFG-123456`) get **no API tokens** and there is no OAuth for
+third-party apps. Every cookie is session-bound and expires after ~20 minutes of inactivity; there is no
+way to refresh it without the login and password again. Therefore:
 
-Это честно написано на странице привязки, галочка согласия обязательна.
+- the user enters the login and password **not in Telegram**, but on the bot's `/link/<token>` page;
+- the bot verifies them with a real login, encrypts them (Fernet, key from `SECRET_KEY`) and stores them in SQLite;
+- every poll logs in again when needed; `/unlink` deletes everything.
 
-## Как бот логинится
+The link page says this explicitly and requires a consent checkbox.
 
-1. `GET dziennik-uczen/<symbol>/Account/Login` → редирект на `dziennik-logowanie/<symbol>/Account/Logon`.
-2. Форма `Login`, `Haslo`, `__RequestVerificationToken`, `captcha-response`.
-   «Капча» — proof-of-work из `captcha.js`: 15 раундов SHA-256, ищется nonce, при котором первые
-   4 байта хэша `< difficulty`. Решается за ~0.7 с (`vulcanbot/vulcan/pow.py`).
-3. Ответ — WS-Federation авто-форма (`wa`, `wresult`, `wctx`), которую клиент сам постит на
-   `dziennik-uczen/.../Account/Login`; после этого появляется кука `Dziennik.Uczen.Sso`.
-4. `key` ученика берётся из `GET api/Context` (`uczniowie[0].key`), см. раздел «API».
-5. API: `GET /<symbol>/api/<Name>?key=<key>&...`. При 401/409/редиректе клиент перелогинивается.
+## How the login works
 
-## Установка
+1. `GET dziennik-uczen/<symbol>/Account/Login` → redirect to `dziennik-logowanie/<symbol>/Account/Logon`.
+2. Form fields `Login`, `Haslo`, `__RequestVerificationToken`, `captcha-response`.
+   The "captcha" is proof-of-work from `captcha.js`: 15 rounds of SHA-256, find a nonce whose first
+   4 hash bytes are `< difficulty`. Solved in ~0.7 s (`vulcanbot/vulcan/pow.py`).
+3. The response is a WS-Federation auto-post form (`wa`, `wresult`, `wctx`); the client posts it to
+   `dziennik-uczen/.../Account/Login`, which sets the `Dziennik.Uczen.Sso` cookie.
+   Note: `wresult` contains unescaped `>` inside the attribute, so forms are parsed with a real HTML parser.
+4. The student `key` comes from `GET api/Context` (`uczniowie[0].key`), see "API".
+5. API: `GET /<symbol>/api/<Name>?key=<key>&...`. On 401/409/redirect the client logs in again.
+
+## Setup
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # заполнить BOT_TOKEN, PUBLIC_URL, SECRET_KEY, VULCAN_SYMBOL
+cp .env.example .env   # fill in BOT_TOKEN, PUBLIC_URL, SECRET_KEY, VULCAN_SYMBOL
 python -m vulcanbot
 ```
 
@@ -41,64 +44,78 @@ python -m vulcanbot
 python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())"
 ```
 
-Сайт привязки слушает `WEB_PORT` (по умолчанию 8080). Наружу его нужно выставить **только по HTTPS**
-(nginx/Caddy/Cloudflare Tunnel), `PUBLIC_URL` — адрес, который увидят пользователи.
+The link page listens on `WEB_PORT` (default 8080). Expose it **only over HTTPS** (nginx/Caddy/Cloudflare
+Tunnel); `PUBLIC_URL` is what users will see.
 
-## Интерфейс
+## Interface
 
-Бот использует **Rich Messages** (Bot API 10.x, aiogram ≥ 3.31): заголовки, таблицы, списки,
-плюс инлайн-кнопки для навигации. Rich-сообщения нельзя редактировать, поэтому листание — это
-удаление старого сообщения и отправка нового. Если клиент Telegram старый и rich-сообщение
-не принято, бот шлёт обычный HTML-текст.
+The bot uses **Rich Messages** (Bot API 10.x, aiogram ≥ 3.31): headings, bordered tables, lists,
+expandable `<details>` blocks and `<tg-button>` buttons inside the message body. Navigation edits the
+message in place (`editMessageText` with `rich_message`). If the client rejects a rich message,
+the bot falls back to plain HTML text.
 
-Внизу постоянная клавиатура: **📅 План · 📝 ДЗ · 🎓 Оценки · ℹ️ Статус**.
+Persistent bottom keyboard: **📅 Plan · 📝 Homework · 🎓 Grades · ℹ️ Status**.
 
-| Экран | Навигация |
+| Screen | Navigation |
 |---|---|
-| План | кнопки дней Пн…Пт (⚠️ = в этот день есть замены), ◀ неделя / вся неделя / неделя ▶ |
-| ДЗ | ◀ неделя / сегодня / неделя ▶ |
-| Оценки | предметы с оценками, переключение semestr 1/2, «все» |
+| Timetable | day buttons Mon…Fri (⚠️ / red = substitutions that day), ◀ week / whole week / week ▶ |
+| Homework & tests | ◀ week / today / week ▶; each item has an expandable description |
+| Grades | subjects with grades, semester 1/2 switch, "all subjects" |
 
-Команды: `/start`, `/link`, `/plan [next]`, `/hw [next]`, `/grades`, `/status`, `/unlink`.
+Commands: `/start`, `/link`, `/plan [next]`, `/hw [next]`, `/grades`, `/status`, `/unlink`.
 
-Сессии Vulcan живут в пуле (`vulcanbot/pool.py`) до 15 минут простоя, поэтому нажатия кнопок
-не вызывают новый логин с PoW каждый раз.
+VULCAN sessions live in a pool (`vulcanbot/pool.py`) for up to 15 idle minutes, so button presses do not
+trigger a new PoW login every time.
 
-## API (снято зондом 17.09.2026)
+## Notifications
 
-Все запросы: `GET https://dziennik-uczen.vulcan.net.pl/<symbol>/api/<Name>?key=<key>&...`,
-даты в ISO UTC, границы недели по Europe/Warsaw (`2026-09-13T22:00:00.000Z`…`2026-09-20T21:59:59.999Z`).
+Every `POLL_INTERVAL` seconds (default 300) the bot compares snapshots and sends:
 
-| Эндпоинт | Параметры | Ответ | Статус |
+- 📚 timetable changes: substitutions, cancellations, new/removed lessons, teacher or room changes (current + next week);
+- 📝 new homework and tests with descriptions (two weeks);
+- 🚫 attendance: new absences, lateness, exemptions and category changes, e.g. when an absence becomes excused (previous + current week);
+- 🎓 new grades in the current semester.
+
+## API (captured with the probe, 2026-09-17)
+
+All requests: `GET https://dziennik-uczen.vulcan.net.pl/<symbol>/api/<Name>?key=<key>&...`,
+dates in ISO UTC, week bounds in Europe/Warsaw (`2026-09-13T22:00:00.000Z`…`2026-09-20T21:59:59.999Z`).
+
+| Endpoint | Params | Response | Status |
 |---|---|---|---|
-| `Context` | без key | `{uczniowie:[{key, uczen, oddzial, jednostka, idDziennik, config{...}}]}` | подтверждён, отсюда берётся `key` |
-| `PlanZajec` | `dataOd, dataDo, zakresDanych=2` | `[{data, godzinaOd, godzinaDo, przedmiot, prowadzacy, sala, podzial, zmiany[], zmianyUwagi[], adnotacja, dodatkowe, zrealizowane}]` | подтверждён |
-| `SprawdzianyZadaniaDomowe` | `dataOd, dataDo` | `[{typ, przedmiotNazwa, data, hasAttachment, id}]`; typ 1 sprawdzian, 2 kartkówka, 3 praca klasowa (?), 4 zadanie domowe | подтверждён |
-| `SprawdzianSzczegoly` | `id` (typ 1–3) | `{typ, data, przedmiotNazwa, nauczycielImieNazwisko, opis, linki[], id}` | подтверждён |
-| `ZadanieDomoweSzczegoly` | `id` (typ 4) | аналогично; с id проверочной даёт 500 | подтверждён |
-| `Frekwencja` | `dataOd, dataDo` | `{oddzialy:[{numerLekcji, kategoriaFrekwencji, data, opisZajec, nauczyciel}], ...}` | подтверждён |
-| `Uwagi` | — | `[]` | подтверждён |
-| `OkresyKlasyfikacyjne` | `idDziennik` | `[{numerOkresu, dataOd, dataDo, id}]` | подтверждён |
-| `Oceny` | `idDziennik, idOkresKlasyfikacyjny` | `{ocenyPrzedmioty:[{przedmiotNazwa, kolumnyOcenyCzastkowe:[{kategoriaKolumny, nazwaKolumny, oceny:[{wpis, dataOceny, waga, nauczyciel, kolorOceny, idKolumny, idOcenaPoprawiona}]}], srednia, ocenaOkresowa, proponowanaOcenaOkresowa}], ustawienia}` | подтверждён |
+| `Context` | no key | `{uczniowie:[{key, uczen, oddzial, jednostka, idDziennik, config{...}}]}` | confirmed, source of `key` |
+| `PlanZajec` | `dataOd, dataDo, zakresDanych=2` | `[{data, godzinaOd, godzinaDo, przedmiot, prowadzacy, sala, podzial, zmiany[], zmianyUwagi[], adnotacja, dodatkowe, zrealizowane}]` | confirmed |
+| `SprawdzianyZadaniaDomowe` | `dataOd, dataDo` | `[{typ, przedmiotNazwa, data, hasAttachment, id}]`; typ 1 sprawdzian, 2 kartkówka, 3 praca klasowa (?), 4 zadanie domowe | confirmed |
+| `SprawdzianSzczegoly` | `id` (typ 1–3) | `{typ, data, przedmiotNazwa, nauczycielImieNazwisko, opis, linki[], id}` | confirmed |
+| `ZadanieDomoweSzczegoly` | `id` (typ 4) | same shape; returns 500 for a test id | confirmed |
+| `Frekwencja` | `dataOd, dataDo` | `{oddzialy:[{numerLekcji, kategoriaFrekwencji, data, opisZajec, nauczyciel}], ...}` | confirmed |
+| `Uwagi` | — | `[]` | confirmed |
+| `OkresyKlasyfikacyjne` | `idDziennik` | `[{numerOkresu, dataOd, dataDo, id}]` | confirmed |
+| `Oceny` | `idDziennik, idOkresKlasyfikacyjny` | `{ocenyPrzedmioty:[{przedmiotNazwa, kolumnyOcenyCzastkowe:[{kategoriaKolumny, nazwaKolumny, oceny:[{wpis, dataOceny, waga, nauczyciel, kolorOceny, idKolumny, idOcenaPoprawiona}]}], srednia, ocenaOkresowa, proponowanaOcenaOkresowa}], ustawienia}` | confirmed |
 
-`idDziennik` берётся из `Context.uczniowie[].idDziennik`. `key` — двойной base64 от `schoolId-studentId-x-y` (`TVRJ…` → `MTIz…` → `12345-67890-1-17`).
+`idDziennik` comes from `Context.uczniowie[].idDziennik`. `key` is double base64 of `schoolId-studentId-x-y`
+(`TVRJ…` → `MTIz…` → `12345-67890-1-17`).
 
-Замена учителя в `PlanZajec` выглядит так:
+A teacher substitution in `PlanZajec` looks like:
 
 ```json
 "zmiany": [{"zmiana": 7, "typProwadzacego": 1, "prowadzacy": "Kowalska Anna", "sala": "", ...}], "adnotacja": 1
 ```
 
-Имена контроллеров вытащены из бандла SPA (`prodbundle_*.js`, статическое поле `ApiName` и
-имена view). Полный список кандидатов в `tools/probe.py`. Зонд:
+Attendance categories (`kategoriaFrekwencji`, as in UONET+/Wulkanowy): 1 present, 2 unexcused absence,
+3 excused absence, 4 absence for school reasons, 5/6 lateness, 7 exemption. 1 and 2 are confirmed.
+
+Controller names were extracted from the SPA bundle (`prodbundle_*.js`: the static `ApiName` field and
+view names). The probe logs in and dumps responses to `probe_out/` (git-ignored):
 
 ```bash
 python tools/probe.py
 ```
 
-## Ограничения и этика
+## Limitations and ethics
 
-- Неофициальный клиент. Vulcan может поменять форму логина или API в любой момент.
-- Не опрашивай чаще, чем раз в несколько минут (`POLL_INTERVAL`), чтобы не словить блокировку аккаунта.
-- Не запускай публичный инстанс без HTTPS и без понимания, что ты хранишь чужие пароли.
-- Бот не запрашивает `DaneUcznia` и `Konto` (там дата рождения, email и т.п.) и не хранит ничего, кроме снимков плана, ДЗ и оценок для сравнения.
+- Unofficial client. VULCAN may change the login form or the API at any time.
+- Do not poll more often than every few minutes (`POLL_INTERVAL`) to avoid account lockouts.
+- Do not run a public instance without HTTPS and without understanding that you store other people's passwords.
+- The bot never requests `DaneUcznia` or `Konto` (birth date, e-mail, …) and stores nothing except
+  the timetable/homework/grade/attendance snapshots needed for change detection.
