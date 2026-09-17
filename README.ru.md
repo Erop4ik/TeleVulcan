@@ -116,6 +116,12 @@ docker compose up -d --build
 docker compose logs -f bot
 ```
 
+**Нет домена?** Quick Tunnel (случайный адрес `*.trycloudflare.com`, без аккаунта Cloudflare):
+оставь `PUBLIC_URL` и `TUNNEL_TOKEN` пустыми и запускай
+`docker compose -f docker-compose.yml -f docker-compose.quick.yml up -d --build`.
+Бот сам берёт текущий адрес туннеля из metrics-эндпоинта cloudflared `/quicktunnel`,
+поэтому `/link` выдаёт рабочую ссылку даже после рестарта туннеля.
+
 На стороне Cloudflare: Zero Trust → Networks → Tunnels → Create tunnel → Docker → токен в
 `TUNNEL_TOKEN`; добавь *Public hostname* `link.твой-домен` → `http://bot:8765` и пропиши
 `https://link.твой-домен` в `PUBLIC_URL`.

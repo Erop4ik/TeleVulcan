@@ -13,6 +13,7 @@ from . import ui
 from .config import config
 from .db import Database
 from .pool import pool
+from .publicurl import get_public_url
 from .vulcan.client import TZ, BadCredentials, VulcanError
 
 log = logging.getLogger(__name__)
@@ -64,9 +65,10 @@ def make_dispatcher(db: Database) -> Dispatcher:
     @dp.message(Command("link"))
     async def link(m: Message):
         token = await db.create_link_token(m.from_user.id)
+        base = await get_public_url()
         await m.answer(
             f"Открой ссылку и введи логин/пароль от дневника (действует 15 минут):\n"
-            f"{config.public_url}/link/{token}", reply_markup=ui.MAIN_KB)
+            f"{base}/link/{token}", reply_markup=ui.MAIN_KB)
 
     @dp.message(Command("unlink"))
     async def unlink(m: Message):
