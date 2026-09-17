@@ -447,6 +447,70 @@ class VulcanClient:
         self.id_dziennik = me.get("idDziennik")
         self.global_key_skrzynka = me.get("globalKeySkrzynka")
 
+    # ---------------- wiadomości (dziennik-wiadomosci) ----------------
+
+    @property
+    def wbase(self) -> str:
+        return f"https://dziennik-wiadomosci.vulcan.net.pl/{self.symbol}"
+
+    def _has_wsso(self) -> bool:
+        return any(c.key == "Dziennik.Wiadomosci.Sso" for c in self.s.cookie_jar)
+
+    async def _wiadomosci_login(self) -> None:
+        """SSO в модуль сообщений: STS уже помнит нас (Vulcan.Efeb.Logowanie.Web),
+        поэтому Fs/Ls сразу отдаёт WS-Fed форму для realm dziennik-wiadomosci."""
+        if not self._has_sso():
+            await self.login_flow()
+        async with self.s.get(f"{self.wbase}/Account/Login?returnUrl=/{self.symbol}/App") as r:
+            html = await r.text()
+            url = str(r.url)
+        for _ in range(5):
+            inputs = _hidden_inputs(html)
+            if "wresult" not in inputs:
+                break
+            target = urljoin(url, _form_action(html) or url)
+            async with self.s.post(target, data=inputs, headers={"Referer": url}) as r:
+                html = await r.text()
+                url = str(r.url)
+        if not self._has_wsso():
+            raise VulcanError(f"wiadomości: нет куки Dziennik.Wiadomosci.Sso (url={url})")
+
+    async def wapi(self, name: str, **params: Any) -> Any:
+        """GET dziennik-wiadomosci/<symbol>/api/<name>. Перелогин при протухшей сессии."""
+        for attempt in range(2):
+            if not self._has_wsso():
+                await self._wiadomosci_login()
+            q = {k: v for k, v in params.items() if v is not None}
+            async with self.s.get(
+                f"{self.wbase}/api/{name}", params=q,
+                headers={"Accept": "application/json, text/plain, */*", "Referer": f"{self.wbase}/App"},
+                allow_redirects=False,
+            ) as r:
+                if r.status in (301, 302, 401, 403, 409) and attempt == 0:
+                    log.info("wiadomości: session expired (%s) -> re-login", r.status)
+                    self.s.cookie_jar.clear()
+                    continue
+                body = await r.text()
+                if r.status != 200:
+                    raise VulcanError(f"wiadomości {name}: HTTP {r.status} {body[:200]!r}")
+                try:
+                    return json.loads(body) if body.strip() else None
+                except ValueError:
+                    return body
+        raise NotLoggedIn(name)
+
+    async def mailboxes(self) -> list[dict]:
+        """Skrzynki -> [{globalKey, nazwa, typUzytkownika}]."""
+        return await self.wapi("Skrzynki") or []
+
+    async def unread_counts(self) -> list[dict]:
+        """LiczbyNieodczytanych -> [{globalKey, liczbaWiadomosci}]."""
+        return await self.wapi("LiczbyNieodczytanych") or []
+
+    async def uwagi(self) -> Any:
+        """Uwagi (замечания/похвалы). Схема пока не снята — у тестового аккаунта пусто."""
+        return await self.api("Uwagi") or []
+
 
 def pretty(obj: Any, limit: int = 3000) -> str:
     s = json.dumps(obj, ensure_ascii=False, indent=1)

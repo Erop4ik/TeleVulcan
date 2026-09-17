@@ -81,6 +81,8 @@ python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().de
 | `Frekwencja` | `dataOd, dataDo` | `{oddzialy:[{numerLekcji, kategoriaFrekwencji, data, opisZajec, nauczyciel}], ...}` | подтверждён |
 | `Uwagi` | — | `[]` | подтверждён |
 | `OkresyKlasyfikacyjne` | `idDziennik` | `[{numerOkresu, dataOd, dataDo, id}]` | подтверждён |
+| `Skrzynki` (wiadomości) | — | `[{globalKey, nazwa, typUzytkownika}]` | подтверждён, модуль `dziennik-wiadomosci` |
+| `LiczbyNieodczytanych` (wiadomości) | — | `[{globalKey, liczbaWiadomosci}]` | подтверждён |
 | `Oceny` | `idDziennik, idOkresKlasyfikacyjny` | `{ocenyPrzedmioty:[{przedmiotNazwa, kolumnyOcenyCzastkowe:[{kategoriaKolumny, nazwaKolumny, oceny:[{wpis, dataOceny, waga, nauczyciel, kolorOceny, idKolumny, idOcenaPoprawiona}]}], srednia, ocenaOkresowa, proponowanaOcenaOkresowa}], ustawienia}` | подтверждён |
 
 `idDziennik` берётся из `Context.uczniowie[].idDziennik`. `key` — двойной base64 от `schoolId-studentId-x-y` (`TVRJ…` → `MTIz…` → `12345-67890-1-17`).

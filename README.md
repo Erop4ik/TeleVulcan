@@ -74,7 +74,9 @@ Every `POLL_INTERVAL` seconds (default 300) the bot compares snapshots and sends
 - 📚 timetable changes: substitutions, cancellations, new/removed lessons, teacher or room changes (current + next week);
 - 📝 new homework and tests with descriptions (two weeks);
 - 🚫 attendance: new absences, lateness, exemptions and category changes, e.g. when an absence becomes excused (previous + current week);
-- 🎓 new grades in the current semester.
+- 🎓 new grades in the current semester, and semester/proposed grades (`ocenaOkresowa`, `proponowanaOcenaOkresowa`);
+- 📣 new `Uwagi` (teacher remarks; schema not captured yet, rendered generically);
+- ✉️ messages: growth of the unread counter in `dziennik-wiadomosci` (`LiczbyNieodczytanych`); the bot SSOs into the messages module with the same STS session.
 
 ## API (captured with the probe, 2026-09-17)
 
@@ -91,6 +93,8 @@ dates in ISO UTC, week bounds in Europe/Warsaw (`2026-09-13T22:00:00.000Z`…`20
 | `Frekwencja` | `dataOd, dataDo` | `{oddzialy:[{numerLekcji, kategoriaFrekwencji, data, opisZajec, nauczyciel}], ...}` | confirmed |
 | `Uwagi` | — | `[]` | confirmed |
 | `OkresyKlasyfikacyjne` | `idDziennik` | `[{numerOkresu, dataOd, dataDo, id}]` | confirmed |
+| `Skrzynki` (messages) | — | `[{globalKey, nazwa, typUzytkownika}]` | confirmed, `dziennik-wiadomosci` module |
+| `LiczbyNieodczytanych` (messages) | — | `[{globalKey, liczbaWiadomosci}]` | confirmed |
 | `Oceny` | `idDziennik, idOkresKlasyfikacyjny` | `{ocenyPrzedmioty:[{przedmiotNazwa, kolumnyOcenyCzastkowe:[{kategoriaKolumny, nazwaKolumny, oceny:[{wpis, dataOceny, waga, nauczyciel, kolorOceny, idKolumny, idOcenaPoprawiona}]}], srednia, ocenaOkresowa, proponowanaOcenaOkresowa}], ustawienia}` | confirmed |
 
 `idDziennik` comes from `Context.uczniowie[].idDziennik`. `key` is double base64 of `schoolId-studentId-x-y`

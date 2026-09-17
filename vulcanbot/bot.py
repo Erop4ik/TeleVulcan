@@ -7,7 +7,7 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from . import ui
 from .config import config
@@ -89,8 +89,28 @@ def make_dispatcher(db: Database) -> Dispatcher:
             return
         ok = datetime.fromtimestamp(acc["last_ok"], TZ).strftime("%d.%m %H:%M") if acc["last_ok"] else "никогда"
         err = f"\nПоследняя ошибка: {acc['last_error']}" if acc["last_error"] else ""
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="🔓 Отвязать аккаунт", callback_data="unlink:ask")]])
         await m.answer(f"Логин: {acc['login']}\nПоследний успешный опрос: {ok}{err}\n"
-                       f"Опрос каждые {config.poll_interval // 60} мин.", reply_markup=ui.MAIN_KB)
+                       f"Опрос каждые {config.poll_interval // 60} мин.", reply_markup=kb)
+
+    @dp.callback_query(F.data == "unlink:ask")
+    async def unlink_ask(cq: CallbackQuery):
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="Да, удалить", callback_data="unlink:yes"),
+            InlineKeyboardButton(text="Отмена", callback_data="unlink:no")]])
+        await cq.answer()
+        await cq.message.edit_text("Удалить логин, пароль и все данные? Уведомления прекратятся.", reply_markup=kb)
+
+    @dp.callback_query(F.data.in_({"unlink:yes", "unlink:no"}))
+    async def unlink_confirm(cq: CallbackQuery):
+        await cq.answer()
+        if cq.data == "unlink:yes":
+            await pool.drop(cq.from_user.id)
+            await db.delete_account(cq.from_user.id)
+            await cq.message.edit_text("Аккаунт отвязан, логин, пароль и снимки данных удалены. Привязать заново: /link")
+        else:
+            await cq.message.edit_text("Отменено.")
 
     # ---------- план ----------
 

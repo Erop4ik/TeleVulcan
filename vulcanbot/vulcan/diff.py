@@ -296,3 +296,68 @@ def attendance_changes(old: Any, new: Any) -> list[str]:
             line += f" (было: {FREKWENCJA.get(prev[k], prev[k])})"
         out.append(line)
     return out
+
+
+# ---------------- uwagi (замечания) ----------------
+# Схема не снята (пусто у тестового аккаунта): сравниваем элементы как JSON, печатаем знакомые поля.
+
+def _list_items(d: Any) -> list:
+    if isinstance(d, list):
+        return d
+    return [v for vv in (d or {}).values() if isinstance(vv, list) for v in vv]
+
+
+def uwagi_new(old: Any, new: Any) -> list[str]:
+    if old is None:
+        return []
+    seen = {_canon(x) for x in _list_items(old)}
+    out = []
+    for x in _list_items(new):
+        if _canon(x) in seen:
+            continue
+        if isinstance(x, dict):
+            parts = [str(x[k]) for k in ("data", "dataWpisu", "kategoria", "kategoriaNazwa", "tresc", "opis", "nauczyciel", "punkty")
+                     if x.get(k) not in (None, "")]
+            out.append(" — ".join(parts) or _plain(x))
+        else:
+            out.append(_plain(x))
+    return out
+
+
+# ---------------- семестровые оценки ----------------
+
+def semester_grade_changes(old: Any, new: Any) -> list[str]:
+    """Изменения ocenaOkresowa / proponowanaOcenaOkresowa по предметам."""
+    if old is None:
+        return []
+
+    def table(d):
+        return {s.get("przedmiotNazwa"): (str(s.get("ocenaOkresowa") or "").strip(),
+                                          str(s.get("proponowanaOcenaOkresowa") or "").strip())
+                for s in (d or {}).get("ocenyPrzedmioty", []) or []}
+
+    o, n = table(old), table(new)
+    out = []
+    for subj, (okres, prop) in n.items():
+        po, pp = o.get(subj, ("", ""))
+        if okres and okres != po:
+            out.append(f"{subj}: ocena okresowa {okres}" + (f" (было {po})" if po else ""))
+        if prop and prop != pp:
+            out.append(f"{subj}: proponowana {prop}" + (f" (было {pp})" if pp else ""))
+    return out
+
+
+# ---------------- сообщения ----------------
+
+def unread_changes(old: Any, new: Any) -> list[str]:
+    """Рост счётчика непрочитанных в LiczbyNieodczytanych."""
+    if old is None:
+        return []
+    prev = {x.get("globalKey"): x.get("liczbaWiadomosci") or 0 for x in old or []}
+    out = []
+    for x in new or []:
+        cnt = x.get("liczbaWiadomosci") or 0
+        was = prev.get(x.get("globalKey"), 0)
+        if cnt > was:
+            out.append(f"Новых сообщений: {cnt - was} (непрочитанных всего: {cnt})")
+    return out

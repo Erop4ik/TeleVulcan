@@ -12,7 +12,8 @@ from .db import Database
 from . import ui
 from .pool import pool
 from .vulcan.client import TZ, BadCredentials, VulcanError
-from .vulcan.diff import attendance_changes, homework_line, new_grades, new_items, plan_changes
+from .vulcan.diff import (attendance_changes, homework_line, new_grades, new_items, plan_changes,
+                          semester_grade_changes, unread_changes, uwagi_new)
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +81,24 @@ async def check_account(bot: Bot, db: Database, acc: dict) -> None:
             await db.set_snapshot(tg_id, "grades", data)
             if old is not None:
                 await _send(bot, tg_id, "🎓 Новые оценки:", new_grades(old, data))
+                await _send(bot, tg_id, "🏁 Семестровые оценки:", semester_grade_changes(old, data))
+
+            # --- uwagi ---
+            data = await client.uwagi()
+            old = await db.get_snapshot(tg_id, "uwagi")
+            await db.set_snapshot(tg_id, "uwagi", data)
+            if old is not None:
+                await _send(bot, tg_id, "📣 Uwagi (замечания):", uwagi_new(old, data))
+
+            # --- сообщения: счётчик непрочитанных ---
+            try:
+                data = await client.unread_counts()
+                old = await db.get_snapshot(tg_id, "unread")
+                await db.set_snapshot(tg_id, "unread", data)
+                if old is not None:
+                    await _send(bot, tg_id, "✉️ Wiadomości:", unread_changes(old, data))
+            except VulcanError as e:
+                log.warning("tg=%s wiadomości: %s", tg_id, e)
 
             await db.mark(tg_id, True, key=client.key)
         except BadCredentials as e:
