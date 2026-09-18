@@ -105,39 +105,59 @@ def lesson_line(x: dict) -> str:
     return line + (" — " + "; ".join(flags) if flags else "")
 
 
+# Поля, изменение которых не считаем событием (Vulcan меняет их после проведения урока и т.п.)
+_PLAN_IGNORE = {"zrealizowane", "podzial", "pseudonim", "idJednostkaSkladowa", "adnotacja"}
+
+
 def _slot(x: dict) -> str:
-    return f"{x.get('data')}|{x.get('godzinaOd')}|{x.get('przedmiot')}|{x.get('podzial')}"
+    """Ключ урока — только дата и время начала (HH:MM). Предмет/группа могут меняться в записи,
+    из-за чего раньше один урок выглядел как «новый + убранный»."""
+    return f"{(x.get('data') or '')[:10]}|{_time(x.get('godzinaOd'))}"
+
+
+def _norm(x: dict) -> dict:
+    return {k: v for k, v in x.items() if k not in _PLAN_IGNORE}
 
 
 def plan_changes(old: list | None, new: list) -> list[str]:
     """Что поменялось между двумя снимками недели: новые/убранные уроки, замены, отмены."""
     if old is None:
         return []
-    old_map = {_slot(x): x for x in old or []}
-    new_map = {_slot(x): x for x in new or []}
+    old_map: dict[str, list[dict]] = {}
+    for x in old or []:
+        old_map.setdefault(_slot(x), []).append(x)
+    new_map: dict[str, list[dict]] = {}
+    for x in new or []:
+        new_map.setdefault(_slot(x), []).append(x)
     out: list[str] = []
-    for slot, item in new_map.items():
-        prev = old_map.get(slot)
-        if prev is not None and _canon(prev) == _canon(item):
-            continue
-        if prev is None:
-            out.append("➕ Новый урок: " + lesson_line(item))
-            continue
-        # тот же слот, но что-то изменилось
-        changed = [k for k in item if item.get(k) != prev.get(k) and k != "zrealizowane"]
-        if not changed:
-            continue  # поменялся только флаг «zrealizowane»
-        tag = "✏️ Изменение"
-        if item.get("zmiany") or item.get("zmianyUwagi") or item.get("adnotacja"):
-            tag = "🔁 Замена/изменение"
-        if item.get("prowadzacy") != prev.get("prowadzacy"):
-            tag += f" (учитель: {prev.get('prowadzacy')} → {item.get('prowadzacy')})"
-        if item.get("sala") != prev.get("sala"):
-            tag += f" (кабинет: {prev.get('sala') or '—'} → {item.get('sala') or '—'})"
-        out.append(f"{tag}: {lesson_line(item)}")
-    for slot, item in old_map.items():
-        if slot not in new_map:
-            out.append("❌ Урок убран/отменён: " + lesson_line(item))
+    for slot, items in new_map.items():
+        prevs = old_map.get(slot, [])
+        for item in items:
+            # ищем ту же запись (по предмету), иначе любую в этом слоте
+            prev = next((p for p in prevs if p.get("przedmiot") == item.get("przedmiot")), prevs[0] if prevs else None)
+            if prev is None:
+                out.append("➕ Новый урок: " + lesson_line(item))
+                continue
+            if _canon(_norm(prev)) == _canon(_norm(item)):
+                continue
+            tag = "✏️ Изменение"
+            if item.get("zmiany") or item.get("zmianyUwagi"):
+                tag = "🔁 Замена/изменение"
+            if item.get("przedmiot") != prev.get("przedmiot"):
+                tag += f" (предмет: {prev.get('przedmiot')} → {item.get('przedmiot')})"
+            if item.get("prowadzacy") != prev.get("prowadzacy"):
+                tag += f" (учитель: {prev.get('prowadzacy')} → {item.get('prowadzacy')})"
+            if item.get("sala") != prev.get("sala"):
+                tag += f" (кабинет: {prev.get('sala') or '—'} → {item.get('sala') or '—'})"
+            diff_keys = sorted(k for k in set(_norm(item)) | set(_norm(prev)) if item.get(k) != prev.get(k))
+            if not any(k in ("przedmiot", "prowadzacy", "sala", "zmiany", "zmianyUwagi") for k in diff_keys):
+                tag += f" (поля: {', '.join(diff_keys)})"  # чтобы видеть, что именно поменял Vulcan
+            out.append(f"{tag}: {lesson_line(item)}")
+    for slot, items in old_map.items():
+        new_items_ = new_map.get(slot, [])
+        for item in items:
+            if not any(n.get("przedmiot") == item.get("przedmiot") for n in new_items_) and len(new_items_) < len(items):
+                out.append("❌ Урок убран/отменён: " + lesson_line(item))
     return out
 
 
