@@ -2,3 +2,4 @@
 *.sqlite3
 __pycache__/
 probe_out/
+vulcanbot/*_local.py

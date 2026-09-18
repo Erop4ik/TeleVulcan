@@ -13,6 +13,13 @@ from aiogram.types import (InlineKeyboardButton, InlineKeyboardMarkup, InputRich
 from .vulcan.client import TZ
 from .vulcan.diff import HW_TYPES, ZMIANA, _dt, flatten_grades
 
+# Необязательное локальное дополнение (не в репозитории): кабинеты из внешнего плана школы,
+# если Vulcan не заполняет `sala`. Модуль должен давать `async refresh()` и `room_for(lesson)`.
+try:
+    from . import rooms_local as rooms  # type: ignore
+except ImportError:
+    rooms = None
+
 log = logging.getLogger(__name__)
 
 DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
@@ -121,7 +128,7 @@ def _lesson_row(x: dict) -> str:
         subj = f"<b>{subj}</b><br>" + " ".join(notes)
     elif not teacher.startswith("<s>"):
         teacher = e(teacher)
-    sala = e(str(x.get("sala") or ""))
+    sala = e(str(x.get("sala") or (rooms.room_for(x) if rooms else "") or ""))
     t = f"{_t(x.get('godzinaOd'))}<br>{_t(x.get('godzinaDo'))}"
     return f"<tr><td>{t}</td><td>{subj}</td><td>{teacher}{('<br>s. ' + sala) if sala else ''}</td></tr>"
 

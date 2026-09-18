@@ -136,6 +136,8 @@ def make_dispatcher(db: Database) -> Dispatcher:
         items = await run(m, acc, lambda c: c.plan(ui.week_monday(offset)))
         if items is None:
             return
+        if ui.rooms:
+            await ui.rooms.refresh()
         html, kb = ui.render_plan(items, offset, day)
         await show(bot, m, html, kb)
 
