@@ -381,3 +381,11 @@ def unread_changes(old: Any, new: Any) -> list[str]:
         if cnt > was:
             out.append(f"Новых сообщений: {cnt - was} (непрочитанных всего: {cnt})")
     return out
+
+
+def new_messages(old: Any, new: Any) -> list[dict]:
+    """Письма из Odebrane, которых не было в прошлом снимке (по id)."""
+    if old is None:
+        return []
+    seen = {x.get("id") for x in old or []}
+    return [x for x in new or [] if x.get("id") not in seen]

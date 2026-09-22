@@ -503,6 +503,14 @@ class VulcanClient:
         """Skrzynki -> [{globalKey, nazwa, typUzytkownika}]."""
         return await self.wapi("Skrzynki") or []
 
+    async def messages(self, page_size: int = 20) -> list[dict]:
+        """Odebrane -> [{apiGlobalKey, id, korespondenci, temat, data, hasZalaczniki, przeczytana, ...}]."""
+        return await self.wapi("Odebrane", idLastWiadomosc=0, pageSize=page_size) or []
+
+    async def message_details(self, api_global_key: str) -> dict:
+        """WiadomoscSzczegoly -> {nadawca, odbiorcy, temat, tresc (HTML), data, zalaczniki, ...}."""
+        return await self.wapi("WiadomoscSzczegoly", apiGlobalKey=api_global_key) or {}
+
     async def unread_counts(self) -> list[dict]:
         """LiczbyNieodczytanych -> [{globalKey, liczbaWiadomosci}]."""
         return await self.wapi("LiczbyNieodczytanych") or []

@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
-from html import escape as e
+from html import escape as e, unescape
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
@@ -288,3 +289,35 @@ def render_plan_alert(lines: list[str]) -> str:
 
 def render_list_alert(title: str, lines: list[str]) -> str:
     return f"<h3>{e(title)}</h3><ul>" + "".join(f"<li>{e(l)}</li>" for l in lines) + "</ul>"
+
+
+def _msg_text(html: str | None) -> str:
+    """HTML письма Vulcan -> плоский текст с переносами."""
+    t = re.sub(r"(?i)<br\s*/?>", "\n", html or "")
+    t = re.sub(r"(?i)</(p|div|li|h\d)>", "\n", t)
+    t = unescape(re.sub(r"<[^>]+>", "", t)).replace("\xa0", " ")
+    t = re.sub(r"\n{3,}", "\n\n", "\n".join(ln.rstrip() for ln in t.splitlines()))
+    return t.strip()
+
+
+def render_message_alert(meta: dict, det: dict | None) -> tuple[str, str]:
+    """(rich html, plain fallback) для нового письма из Odebrane."""
+    det = det or {}
+    sender = det.get("nadawca") or meta.get("korespondenci") or "?"
+    subject = det.get("temat") or meta.get("temat") or "(без темы)"
+    d = _dt(meta.get("data") or det.get("data"))
+    when = f"{d:%d.%m.%Y %H:%M}" if d else ""
+    body = _msg_text(det.get("tresc"))
+    if len(body) > 3000:
+        body = body[:3000] + "…"
+    files = [z.get("nazwaPliku") or z.get("nazwa") or "файл" for z in det.get("zalaczniki") or []]
+    if not files and meta.get("hasZalaczniki"):
+        files = ["есть вложения (смотри в дневнике)"]
+    html = (f"<h3>✉️ Новое сообщение</h3>"
+            f"<p><b>От:</b> {e(sender)}<br><b>Тема:</b> {e(subject)}<br><b>Дата:</b> {e(when)}</p>")
+    html += ("<p>" + e(body).replace("\n", "<br>") + "</p>") if body else "<p><i>Текст не загрузился.</i></p>"
+    if files:
+        html += "<p>📎 " + e(", ".join(files)) + "</p>"
+    plain = (f"✉️ <b>Новое сообщение</b>\nОт: {e(sender)}\nТема: {e(subject)}\nДата: {e(when)}\n\n{e(body)}"
+             + (f"\n\n📎 {e(', '.join(files))}" if files else ""))
+    return html, plain
