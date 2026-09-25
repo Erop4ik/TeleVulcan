@@ -105,8 +105,10 @@ def lesson_line(x: dict) -> str:
     return line + (" — " + "; ".join(flags) if flags else "")
 
 
-# Поля, изменение которых не считаем событием (Vulcan меняет их после проведения урока и т.п.)
-_PLAN_IGNORE = {"zrealizowane", "podzial", "pseudonim", "idJednostkaSkladowa", "adnotacja"}
+# Поля, изменение которых не считаем событием (Vulcan меняет их после проведения урока и т.п.).
+# prowadzacyWspomagajacy1/2 Vulcan дёргает None ↔ "" без реальной смены, в уведомлении их нет.
+_PLAN_IGNORE = {"zrealizowane", "podzial", "pseudonim", "idJednostkaSkladowa", "adnotacja",
+                "prowadzacyWspomagajacy1", "prowadzacyWspomagajacy2"}
 
 
 def _slot(x: dict) -> str:
@@ -116,7 +118,8 @@ def _slot(x: dict) -> str:
 
 
 def _norm(x: dict) -> dict:
-    return {k: v for k, v in x.items() if k not in _PLAN_IGNORE}
+    # None и "" — одно и то же «пусто»: Vulcan чередует их между запросами
+    return {k: v for k, v in x.items() if k not in _PLAN_IGNORE and v not in (None, "")}
 
 
 def plan_changes(old: list | None, new: list) -> list[str]:
@@ -138,7 +141,8 @@ def plan_changes(old: list | None, new: list) -> list[str]:
             if prev is None:
                 out.append("➕ Новый урок: " + lesson_line(item))
                 continue
-            if _canon(_norm(prev)) == _canon(_norm(item)):
+            a, b = _norm(item), _norm(prev)
+            if _canon(a) == _canon(b):
                 continue
             tag = "✏️ Изменение"
             if item.get("zmiany") or item.get("zmianyUwagi"):
@@ -149,7 +153,7 @@ def plan_changes(old: list | None, new: list) -> list[str]:
                 tag += f" (учитель: {prev.get('prowadzacy')} → {item.get('prowadzacy')})"
             if item.get("sala") != prev.get("sala"):
                 tag += f" (кабинет: {prev.get('sala') or '—'} → {item.get('sala') or '—'})"
-            diff_keys = sorted(k for k in set(_norm(item)) | set(_norm(prev)) if item.get(k) != prev.get(k))
+            diff_keys = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
             if not any(k in ("przedmiot", "prowadzacy", "sala", "zmiany", "zmianyUwagi") for k in diff_keys):
                 tag += f" (поля: {', '.join(diff_keys)})"  # чтобы видеть, что именно поменял Vulcan
             out.append(f"{tag}: {lesson_line(item)}")
